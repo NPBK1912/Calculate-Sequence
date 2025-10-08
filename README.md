@@ -1,2 +1,1 @@
-# Project
-Just some mini projects
+# Calculate Sequence
