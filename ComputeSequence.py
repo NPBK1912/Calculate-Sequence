@@ -1,87 +1,95 @@
-import streamlit as st
 import re
-import math
 import ast
+import math
 from typing import Dict, Tuple, List
+
 import pandas as pd
+import streamlit as st
 
 st.set_page_config(page_title="Sequence Studio (Python)", layout="wide")
 
-
-# ---- CSS cho sidebar ----
-
-st.markdown("""
+# ---------- CSS ----------
+st.markdown(
+    """
 <style>
-/* Kích thước & ellipsis cho mọi nút trong sidebar */
 section[data-testid="stSidebar"] .stButton > button {
-  width: 100% !important;          /* full theo cột */
-  min-width: 0 !important;         /* cho phép co */
-  height: 40px !important;         /* đồng chiều cao */
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  width: 100% !important; min-width: 0 !important; height: 40px !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
   padding: 0 10px !important;
 }
 section[data-testid="stSidebar"] .stButton > button * {
-  overflow: hidden !important;         /* ẩn phần dư */
-  text-overflow: ellipsis !important;  /* … khi thiếu chỗ */
-  white-space: nowrap !important;      /* không xuống dòng trong nút */
+  overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
 }
-
-/* Cho khối columns trong sidebar được wrap khi hẹp */
 section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
-  display: flex !important;
-  flex-wrap: wrap !important;       /* CHO PHÉP XUỐNG DÒNG */
-  gap: 8px !important;
+  display: flex !important; flex-wrap: wrap !important; gap: 8px !important;
 }
-
-/* Mặc định: 4 cột một hàng (đều nhau) */
-section[data-testid="stSidebar"]
-  div[data-testid="stHorizontalBlock"]
-  > div[data-testid="column"] {
-  flex: 1 1 calc(25% - 8px) !important;  /* 4 cột đều nhau */
-  max-width: calc(25% - 8px) !important; /* khóa độ rộng để không cột nào to hơn */
+section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+  flex: 1 1 calc(25% - 8px) !important; max-width: calc(25% - 8px) !important;
 }
-
-/* Sidebar hẹp: 2 cột */
 @media (max-width: 280px) {
-  section[data-testid="stSidebar"]
-    div[data-testid="stHorizontalBlock"]
-    > div[data-testid="column"] {
-    flex: 1 1 calc(50% - 8px) !important;
-    max-width: calc(50% - 8px) !important;
+  section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    flex: 1 1 calc(50% - 8px) !important; max-width: calc(50% - 8px) !important;
   }
 }
-
-/* Rất hẹp: 1 cột */
 @media (max-width: 200px) {
-  section[data-testid="stSidebar"]
-    div[data-testid="stHorizontalBlock"]
-    > div[data-testid="column"] {
-    flex: 1 1 100% !important;
-    max-width: 100% !important;
+  section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    flex: 1 1 100% !important; max-width: 100% !important;
   }
 }
-
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# ------------------------- Utility: safe expression evaluation -------------------------
+# ---------- Safe eval ----------
 ALLOWED_MATH_NAMES = {
-    'sin': math.sin, 'cos': math.cos, 'tan': math.tan, 'sinh': math.sinh, 'cosh': math.cosh,
-    'asin': math.asin, 'acos': math.acos, 'atan': math.atan,
-    'log': lambda x, base=None: math.log(x) if base is None else math.log(x, base),
-    'ln': math.log, 'sqrt': math.sqrt, 'abs': abs, 'floor': math.floor, 'ceil': math.ceil,
-    'pi': math.pi, 'e': math.e
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "sinh": math.sinh,
+    "cosh": math.cosh,
+    "asin": math.asin,
+    "acos": math.acos,
+    "atan": math.atan,
+    "log": lambda x, base=None: math.log(x) if base is None else math.log(x, base),
+    "ln": math.log,
+    "sqrt": math.sqrt,
+    "abs": abs,
+    "floor": math.floor,
+    "ceil": math.ceil,
+    "pi": math.pi,
+    "e": math.e,
 }
 
 SAFE_NODES = (
-    ast.Expression, ast.BinOp, ast.UnaryOp, ast.Call,
-    ast.Name, ast.Load, ast.Constant, ast.Num, ast.Subscript,
-    ast.Index, ast.Slice, ast.Tuple, ast.List,
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.UAdd, ast.USub,
-    ast.LShift, ast.RShift, ast.BitOr, ast.BitAnd, ast.BitXor
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Call,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Num,
+    ast.Subscript,
+    ast.Index,
+    ast.Slice,
+    ast.Tuple,
+    ast.List,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Pow,
+    ast.Mod,
+    ast.UAdd,
+    ast.USub,
+    ast.LShift,
+    ast.RShift,
+    ast.BitOr,
+    ast.BitAnd,
+    ast.BitXor,
 )
+
 
 def assert_safe_expr(expr: str):
     try:
@@ -92,23 +100,20 @@ def assert_safe_expr(expr: str):
         if not isinstance(n, SAFE_NODES):
             raise ValueError(f"Unsafe or unsupported expression element: {type(n).__name__}")
 
+
 def safe_eval(expr: str, names: Dict = None):
-    if names is None:
-        names = {}
+    names = names or {}
     assert_safe_expr(expr)
-    code = compile(ast.parse(expr, mode="eval"), '<string>', 'eval')
-    safe_globals = {'__builtins__': None}
-    safe_globals.update(ALLOWED_MATH_NAMES)
-    safe_globals.update(names)
-    return eval(code, safe_globals, {})
+    code = compile(ast.parse(expr, mode="eval"), "<string>", "eval")
+    env = {"__builtins__": None, **ALLOWED_MATH_NAMES, **names}
+    return eval(code, env, {})
 
-# ------------------------- Helpers: LaTeX parsing with nesting -------------------------
 
+# ---------- LaTeX parsing ----------
 def _find_match(s: str, i: int, open_ch: str, close_ch: str) -> int:
     if i < 0 or i >= len(s) or s[i] != open_ch:
         return -1
-    depth = 1
-    j = i + 1
+    depth, j = 1, i + 1
     while j < len(s):
         c = s[j]
         if c == open_ch:
@@ -120,22 +125,6 @@ def _find_match(s: str, i: int, open_ch: str, close_ch: str) -> int:
         j += 1
     return -1
 
-def _strip_outer_parens(x: str) -> str:
-    x = x.strip()
-    if len(x) >= 2 and x[0] == '(' and x[-1] == ')':
-        depth = 0
-        ok = True
-        for i, ch in enumerate(x):
-            if ch == '(':
-                depth += 1
-            elif ch == ')':
-                depth -= 1
-                if depth == 0 and i != len(x) - 1:
-                    ok = False
-                    break
-        if ok:
-            return x[1:-1]
-    return x
 
 def _token_left(s: str, pos: int) -> Tuple[int, str]:
     j = pos - 1
@@ -144,75 +133,74 @@ def _token_left(s: str, pos: int) -> Tuple[int, str]:
     if j < 0:
         return (0, "")
 
-    if s[j] in ')]}':
-        pair = {')': '(', ']': '[', '}': '{'}
+    if s[j] in ")]}":
+        pair = {")": "(", "]": "[", "}": "{"}
         opener = pair[s[j]]
-        k = j
-        depth = 0
+        k, depth = j, 0
         while k >= 0:
             if s[k] == s[j]:
                 depth += 1
             elif s[k] == opener:
                 depth -= 1
                 if depth == 0:
-                    return k, s[k:j+1]
+                    return k, s[k : j + 1]
             k -= 1
-        return (0, s[:j+1])
-    if s[j] == ']':
-        b = j
-        depth = 0
+        return (0, s[: j + 1])
+
+    if s[j] == "]":
+        b, depth = j, 0
         while b >= 0:
-            if s[b] == ']':
+            if s[b] == "]":
                 depth += 1
-            elif s[b] == '[':
+            elif s[b] == "[":
                 depth -= 1
                 if depth == 0:
                     break
             b -= 1
         a = b - 1
-        if a >= 0 and s[a] == 'u':
-            return a, s[a:j+1]
-        return b, s[b:j+1]
+        if a >= 0 and s[a] == "u":
+            return a, s[a : j + 1]
+        return b, s[b : j + 1]
 
     k = j
     while k >= 0 and re.match(r"[A-Za-z0-9_.]", s[k]):
         k -= 1
-    return k + 1, s[k+1:j+1]
+    return k + 1, s[k + 1 : j + 1]
+
 
 def _replace_all_frac(s: str) -> str:
-    i = 0
-    out = s
+    i, out = 0, s
     while True:
         m = re.search(r"\\d?frac\s*\{", out[i:])
         if not m:
             break
         start = i + m.start()
-        lb1 = start + m.group(0).rfind('{')
-        rb1 = _find_match(out, lb1, '{', '}')
+        lb1 = start + m.group(0).rfind("{")
+        rb1 = _find_match(out, lb1, "{", "}")
         if rb1 == -1:
             i = start + 1
             continue
         j = rb1 + 1
         while j < len(out) and out[j].isspace():
             j += 1
-        if j >= len(out) or out[j] != '{':
+        if j >= len(out) or out[j] != "{":
             i = start + 1
             continue
         lb2 = j
-        rb2 = _find_match(out, lb2, '{', '}')
+        rb2 = _find_match(out, lb2, "{", "}")
         if rb2 == -1:
             i = start + 1
             continue
-        num = out[lb1+1:rb1]
-        den = out[lb2+1:rb2]
+        num = out[lb1 + 1 : rb1]
+        den = out[lb2 + 1 : rb2]
         repl = f"({num})/({den})"
-        out = out[:start] + repl + out[rb2+1:]
+        out = out[:start] + repl + out[rb2 + 1 :]
         i = start + len(repl)
     return out
 
+
 def _replace_all_sqrt(s: str) -> str:
-    i = 0
-    out = s
+    i, out = 0, s
     while True:
         m = re.search(r"\\sqrt", out[i:])
         if not m:
@@ -220,70 +208,67 @@ def _replace_all_sqrt(s: str) -> str:
         start = i + m.start()
         j = start + len("\\sqrt")
         k_idx = None
-        if j < len(out) and out[j] == '[':
-            rb = _find_match(out, j, '[', ']')
+        if j < len(out) and out[j] == "[":
+            rb = _find_match(out, j, "[", "]")
             if rb == -1:
                 i = start + 1
                 continue
-            k_idx = out[j+1:rb].strip()
+            k_idx = out[j + 1 : rb].strip()
             j = rb + 1
         while j < len(out) and out[j].isspace():
             j += 1
-        if j >= len(out) or out[j] != '{':
+        if j >= len(out) or out[j] != "{":
             i = start + 1
             continue
-        rb2 = _find_match(out, j, '{', '}')
+        rb2 = _find_match(out, j, "{", "}")
         if rb2 == -1:
             i = start + 1
             continue
-        expr = out[j+1:rb2]
-        if k_idx is None or k_idx == '':
-            repl = f"sqrt({expr})"
-        else:
-            repl = f"(({expr})**(1.0/{k_idx}))"
-        out = out[:start] + repl + out[rb2+1:]
+        expr = out[j + 1 : rb2]
+        repl = f"sqrt({expr})" if not k_idx else f"(({expr})**(1.0/{k_idx}))"
+        out = out[:start] + repl + out[rb2 + 1 :]
         i = start + len(repl)
     return out
 
+
 def _replace_all_power(s: str) -> str:
-    i = 0
-    out = s
+    i, out = 0, s
     while i < len(out):
-        if out[i] == '^':
-            if i + 1 < len(out) and out[i+1] == '{':
-                rb = _find_match(out, i+1, '{', '}')
+        if out[i] == "^":
+            if i + 1 < len(out) and out[i + 1] == "{":
+                rb = _find_match(out, i + 1, "{", "}")
                 if rb == -1:
                     i += 1
                     continue
-                exp_str = out[i+2:rb]
+                exp_str = out[i + 2 : rb]
                 base_start, base_tok = _token_left(out, i)
                 if base_tok == "":
                     i = rb + 1
                     continue
                 repl = f"({base_tok})**({exp_str})"
-                out = out[:base_start] + repl + out[rb+1:]
+                out = out[:base_start] + repl + out[rb + 1 :]
                 i = base_start + len(repl)
                 continue
             else:
                 j = i + 1
-                if j < len(out) and out[j] in '([{':
-                    rb = _find_match(out, j, out[j], { '(':')', '[':']', '{':'}'}[out[j]])
+                if j < len(out) and out[j] in "([{":
+                    rb = _find_match(out, j, out[j], {"(": ")", "[": "]", "{": "}"}[out[j]])
                     if rb == -1:
                         i += 1
                         continue
-                    exp_str = out[j:rb+1]
+                    exp_str = out[j : rb + 1]
                     base_start, base_tok = _token_left(out, i)
                     if base_tok == "":
                         i = rb + 1
                         continue
                     repl = f"({base_tok})**({exp_str})"
-                    out = out[:base_start] + repl + out[rb+1:]
+                    out = out[:base_start] + repl + out[rb + 1 :]
                     i = base_start + len(repl)
                     continue
                 j = i + 1
                 while j < len(out) and re.match(r"[A-Za-z0-9_.]", out[j]):
                     j += 1
-                exp_str = out[i+1:j]
+                exp_str = out[i + 1 : j]
                 base_start, base_tok = _token_left(out, i)
                 if base_tok == "":
                     i = j
@@ -295,104 +280,65 @@ def _replace_all_power(s: str) -> str:
         i += 1
     return out
 
+
 def _cleanup_latex_misc(s: str) -> str:
-    out = s
-    out = out.replace(r"\left", "").replace(r"\right", "")
-    out = out.replace(r"\cdot", "*")
+    out = s.replace(r"\left", "").replace(r"\right", "").replace(r"\cdot", "*")
     out = re.sub(r"\\(,|;|:|!|quad|qquad)\b", " ", out)
     out = re.sub(r"\|(.*?)\|", r"abs(\1)", out)
     return out
 
-# ------------------------- Formula normalization & conversion -------------------------
 
+# ---------- Formula conversion ----------
 def normalize_formula(formula: str) -> Tuple[str, int]:
-    """Normalize u[n+...] offsets relative to LHS base index and shift bare n if needed."""
     formula = formula.strip()
-    left = formula.split('=', 1)[0] if '=' in formula else formula
+    left = formula.split("=", 1)[0] if "=" in formula else formula
     m = re.search(r"u\[n([+-]?\d*)\]", left)
     base_offset = int(m.group(1) or 0) if m else 0
 
     def _norm_u(match):
-        g = match.group(1) or '0'
-        off = int(g)
+        off = int(match.group(1) or "0")
         norm = off - base_offset
-        if norm == 0:
-            return "u[n]"
-        return f"u[n{norm:+}]"
+        return "u[n]" if norm == 0 else f"u[n{norm:+}]"
 
     normalized_u = re.sub(r"u\[n([+-]?\d*)\]", _norm_u, formula)
-
     if base_offset == 0:
-        normalized_n = normalized_u
-    else:
-        offset_str = f"(n{ -base_offset:+})"
-        normalized_n = re.sub(r"\bn\b", offset_str, normalized_u)
-
+        return normalized_u, base_offset
+    normalized_n = re.sub(r"\bn\b", f"(n{ -base_offset:+})", normalized_u)
     return normalized_n, base_offset
 
 
 def convert_formula_to_python(formula: str) -> str:
-    """Convert LaTeX-like math into Python expression string."""
-    if '=' in formula:
-        rhs = formula.split('=', 1)[1]
-    else:
-        rhs = formula
-    out = rhs
-
-    # 1) Dọn LaTeX không ảnh hưởng ý nghĩa
-    out = _cleanup_latex_misc(out)
-
-    # 2) Thay \frac / \dfrac, \sqrt, mũ ^
+    rhs = formula.split("=", 1)[1] if "=" in formula else formula
+    out = _cleanup_latex_misc(rhs)
     out = _replace_all_frac(out)
     out = _replace_all_sqrt(out)
     out = _replace_all_power(out)
+    out = re.sub(r"cotg\((.*?)\)", r"(1/tan(\1))", out)
+    out = out.replace("^", "**").replace("ln(", "log(")
 
-    # 3) Các phép khác
-    out = re.sub(r"cotg\((.*?)\)", r"(1/tan(\1))", out)  # cotg(x) -> 1/tan(x)
-    out = out.replace("^", "**")                          # fallback nếu còn ^
-    out = out.replace("ln(", "log(")                      # ln -> log tự nhiên
-
-    # 4) \log cơ số a của b:
-    #    \log_{a}{b}
-    out = re.sub(
-        r"\\log_\{([^{}]+)\}\{([^{}]+)\}",
-        lambda m: f"log({m.group(2)},{m.group(1)})",
-        out
-    )
-    #    \log[a]{b}
-    out = re.sub(
-        r"\\log\[(.*?)\]\{(.*?)\}",
-        lambda m: f"log({m.group(2)},{m.group(1)})",
-        out
-    )
-    #    \log b  (nếu người dùng gõ \log(...) thường) -> log(...)
+    out = re.sub(r"\\log_\{([^{}]+)\}\{([^{}]+)\}", lambda m: f"log({m.group(2)},{m.group(1)})", out)
+    out = re.sub(r"\\log\[(.*?)\]\{(.*?)\}", lambda m: f"log({m.group(2)},{m.group(1)})", out)
     out = out.replace("\\log", "log").replace("\\ln", "log")
 
-    # 5) Hàm lượng giác & hyperbolic (LaTeX -> Python)
     trig_map = {
         r"\\sin": "sin",
         r"\\cos": "cos",
         r"\\tan": "tan",
-        r"\\cot": "1/tan",   # cot(x) = 1/tan(x)
-        r"\\sec": "1/cos",   # sec(x) = 1/cos(x)
-        r"\\csc": "1/sin",   # csc(x) = 1/sin(x)
+        r"\\cot": "1/tan",
+        r"\\sec": "1/cos",
+        r"\\csc": "1/sin",
         r"\\sinh": "sinh",
         r"\\cosh": "cosh",
-        r"\\tanh": "tanh"
+        r"\\tanh": "tanh",
     }
     for latex_cmd, py_func in trig_map.items():
-        # ví dụ \sin{x} -> sin(x)
         out = re.sub(latex_cmd + r"\{([^{}]+)\}", f"{py_func}(\\1)", out)
-        # ví dụ \sin x -> sin(x)
         out = re.sub(latex_cmd + r"\s*([A-Za-z0-9_\(])", f"{py_func}(\\1", out)
 
-    # 6) Chuẩn hoá khoảng trắng
-    out = re.sub(r"\s+", " ", out).strip()
-    return out
+    return re.sub(r"\s+", " ", out).strip()
 
 
-# ------------------------- Sequence compute using Python evaluator -------------------------
-
+# ---------- Compute ----------
 def compute_sequence(k: int, initials: Dict[int, float], n_target: int, python_rhs: str) -> Dict[int, float]:
     values = dict(initials)
     offsets = sorted({int(m or 0) for m in re.findall(r"u\[n([+-]?\d*)\]", python_rhs)})
@@ -403,170 +349,138 @@ def compute_sequence(k: int, initials: Dict[int, float], n_target: int, python_r
     start_n = max(values.keys()) + 1 if values else k + max_offset + 1
 
     for n in range(start_n, n_target + 1):
-        expr = python_rhs
-
-        def repl(match):
-            off_str = match.group(1) or '0'
-            off = int(off_str)
+        def repl(m):
+            off = int(m.group(1) or "0")
             idx = n + off
             if idx not in values:
                 raise KeyError(f"Thiếu giá trị u({idx}) khi tính u({n}).")
             return repr(values[idx])
 
-        expr_filled = re.sub(r"u\[n([+-]?\d*)\]", repl, expr)
-
+        expr_filled = re.sub(r"u\[n([+-]?\d*)\]", repl, python_rhs)
         try:
-            result = safe_eval(expr_filled, names={'n': n})
+            values[n] = float(safe_eval(expr_filled, names={"n": n}))
         except Exception as e:
             raise RuntimeError(f"Lỗi tính u({n}): {e}")
-
-        values[n] = float(result)
-
     return values
 
-# ------------------------- Streamlit UI -------------------------
 
+# ---------- UI ----------
 st.title("Tính dãy số theo công thức truy hồi")
-st.markdown("Nhập công thức truy hồi (hỗ trợ **LaTeX**: `\\frac`, `\\dfrac`, `\\sqrt[k]{}`, mũ `^{}`, `|.|`, `\\cdot`, `\\log_{a}{b}`.")
+st.markdown(
+    "Nhập công thức (hỗ trợ LaTeX: `\\frac`, `\\dfrac`, `\\sqrt[k]{}`, mũ `^{}`, `|.|`, `\\cdot`, `\\log_{a}{b}`.)"
+)
 
 with st.sidebar:
     st.header("Phím tắt")
 
     def _ins(s: str):
-        st.session_state.setdefault('raw_formula', '')
-        if st.session_state['raw_formula'] and not st.session_state['raw_formula'].endswith((' ', '\n')):
-            st.session_state['raw_formula'] += ' '
-        st.session_state['raw_formula'] += s + ' '
+        st.session_state.setdefault("raw_formula", "")
+        if st.session_state["raw_formula"] and not st.session_state["raw_formula"].endswith((" ", "\n")):
+            st.session_state["raw_formula"] += " "
+        st.session_state["raw_formula"] += s + " "
 
-    # Hàng 1: sin, cos, tan, cot
     row = st.columns(4)
-    if row[0].button("sin", use_container_width=True): _ins(r"\sin{}")
-    if row[1].button("cos", use_container_width=True): _ins(r"\cos{}")
-    if row[2].button("tan", use_container_width=True): _ins(r"\tan{}")
-    if row[3].button("cot", use_container_width=True): _ins(r"\cot{}")
+    if row[0].button("sin", use_container_width=True):
+        _ins(r"\sin{}")
+    if row[1].button("cos", use_container_width=True):
+        _ins(r"\cos{}")
+    if row[2].button("tan", use_container_width=True):
+        _ins(r"\tan{}")
+    if row[3].button("cot", use_container_width=True):
+        _ins(r"\cot{}")
 
-    # Hàng 2: Phân số, Lũy thừa, √, √k
     row = st.columns(4)
-    if row[0].button("Phân số", use_container_width=True): _ins(r"\frac{}{}")
-    if row[1].button("Lũy thừa", use_container_width=True): _ins(r"^{}")
-    if row[2].button("√", use_container_width=True): _ins(r"\sqrt{}")
-    if row[3].button("√k", use_container_width=True): _ins(r"\sqrt[]{}")
-
-    # Footer: Thông tin người code và liên kết mạng xã hội
-    st.markdown("""
-    <br><br>
-    <div style="font-size: 14px; color: gray;">
-        <p><strong>Người code: NPBK</strong></p>
-        <p>
-            <a href="https://www.facebook.com/khang.nguyenphu.56232/" target="_blank">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg" alt="Facebook" style="width: 20px; margin-right: 5px; vertical-align: middle;" />
-                Facebook
-            </a>
-        </p>
-        <p>
-            <a href="https://www.instagram.com/npbk.apcs/" target="_blank">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="Instagram" style="width: 20px; margin-right: 5px; vertical-align: middle;" />
-                Instagram
-            </a>
-        </p>
-        <p>
-            <a href="https://github.com/NPBK1912/" target="_blank">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/9/91/Octicons-mark-github.svg" alt="GitHub" style="width: 20px; margin-right: 5px; vertical-align: middle;" />
-                GitHub
-            </a>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    if row[0].button("Phân số", use_container_width=True):
+        _ins(r"\frac{}{}")
+    if row[1].button("Lũy thừa", use_container_width=True):
+        _ins(r"^{}")
+    if row[2].button("√", use_container_width=True):
+        _ins(r"\sqrt{}")
+    if row[3].button("√k", use_container_width=True):
+        _ins(r"\sqrt[]{}")
 
 raw_formula = st.text_area(
-    "Công thức truy hồi (ví dụ: u[n]=u[n-1]+2\\cdot u[n-2]+\\sqrt[2]{u[n-3]+u[n-4]}+\\frac{1}{n+1})",
-    value=st.session_state.get('raw_formula', 'u[n]=u[n-1]+2*u[n-2]'),
-    height=140
+    "Công thức",
+    value=st.session_state.get("raw_formula", "u[n]=u[n-1]+2*u[n-2]"),
+    height=140,
 )
-st.session_state['raw_formula'] = raw_formula
+st.session_state["raw_formula"] = raw_formula
 
-# >>> Thêm input 'display_count' ngay từ đầu <<<
-col1, col2, col3 = st.columns(3)
-with col1:
-    k = st.number_input("Chỉ số bắt đầu", value=0, format='%d')
-with col2:
-    target_n = st.number_input("Chỉ số cần tính tới", value=5, format='%d')
-with col3:
-    display_count = st.number_input("Số lượng số hạng muốn hiển thị (gần nhất)", value=10, min_value=1, format='%d')
+c1, c2, c3 = st.columns(3)
+with c1:
+    k = st.number_input("Chỉ số bắt đầu", value=0, format="%d")
+with c2:
+    target_n = st.number_input("Tính tới chỉ số", value=5, format="%d")
+with c3:
+    display_count = st.number_input("Số hạng hiển thị (gần nhất)", value=10, min_value=1, format="%d")
 
-st.markdown("**Xem trước công thức**")
+st.markdown("**Xem trước**")
 try:
     norm, base = normalize_formula(raw_formula)
-    def _to_latex_preview(expr: str) -> str:
-        s = expr
-        s = re.sub(r'u\[([^\]]+)\]', r'u_{\1}', s)
-        s = re.sub(r'(?<!\\)\bsqrt\s*\((.*?)\)', r'\\sqrt{\1}', s)
-        s = s.replace('*', r' \cdot ')
-        s = re.sub(r'\s+', ' ', s).strip()
-        return s
-    latex_preview = _to_latex_preview(norm)
-    st.latex(latex_preview)
+
+    def _latex_preview(expr: str) -> str:
+        s = re.sub(r"u\[([^\]]+)\]", r"u_{\1}", expr)
+        s = re.sub(r"(?<!\\)\bsqrt\s*\((.*?)\)", r"\\sqrt{\1}", s)
+        s = s.replace("*", r" \cdot ")
+        return re.sub(r"\s+", " ", s).strip()
+
+    st.latex(_latex_preview(norm))
 except Exception as e:
     st.error(f"Không thể preview: {e}")
 
-if st.button("Chuyển đổi công thức"):
+if st.button("Chuyển đổi"):
     try:
         normalized, base_offset = normalize_formula(raw_formula)
         python_rhs = convert_formula_to_python(normalized)
-        st.session_state['normalized'] = normalized
-        st.session_state['python_rhs'] = python_rhs
-        st.session_state['base_offset'] = base_offset
-
-        st.code(python_rhs, language='python')
+        st.session_state.update(
+            {
+                "normalized": normalized,
+                "python_rhs": python_rhs,
+                "base_offset": base_offset,
+            }
+        )
+        st.code(python_rhs, language="python")
 
         rhs = normalized.split("=", 1)[1] if "=" in normalized else normalized
         offsets = sorted({int(m or 0) for m in re.findall(r"u\[n([+-]?\d*)\]", rhs)})
         needed_indices = [k + off for off in offsets]
-        st.session_state['needed_indices'] = needed_indices
-
-        st.info(f"Công thức yêu cầu giá trị ban đầu cho các chỉ số: {sorted(set(needed_indices))}")
-
+        st.session_state["needed_indices"] = needed_indices
+        st.info(f"Cần giá trị ban đầu cho các chỉ số: {sorted(set(needed_indices))}")
     except Exception as e:
         st.error(f"Phân tích thất bại: {e}")
 
-# --------- Stable input UI using data_editor ----------
-needed = st.session_state.get('needed_indices', [])
+needed = st.session_state.get("needed_indices", [])
 if needed:
-    st.markdown("### Nhập các giá trị khởi đầu")
+    st.markdown("### Giá trị khởi đầu")
     idxs = sorted(set(needed))
     prev_vals = [st.session_state.get(f"init_{i}", "") for i in idxs]
     df_init = pd.DataFrame({"index": idxs, "u(index)": prev_vals})
     edited_df = st.data_editor(df_init, key="init_editor", num_rows="fixed", use_container_width=True)
 
-    if st.button("Tính toán"):
+    if st.button("Tính"):
         try:
-            idxs = sorted(set(needed))
             initials = {}
-            have = set()
             for _, row in edited_df.iterrows():
                 if pd.isna(row.get("index", None)):
                     continue
                 i = int(row["index"])
-                val_str = str(row.get("u(index)", "")).strip()
-                if val_str != "":
-                    initials[i] = float(val_str)
-                    have.add(i)
+                v = str(row.get("u(index)", "")).strip()
+                if v != "":
+                    initials[i] = float(v)
 
-            missing = [i for i in idxs if i not in have]
+            missing = [i for i in idxs if i not in initials]
             if missing:
-                st.error(f"Thiếu giá trị khởi đầu cho các chỉ số: {missing}")
+                st.error(f"Thiếu giá trị khởi đầu cho: {missing}")
                 st.stop()
 
-            normalized = st.session_state['normalized']
-            python_rhs = st.session_state['python_rhs']
+            normalized = st.session_state["normalized"]
+            python_rhs = st.session_state["python_rhs"]
             values = compute_sequence(k, initials, int(target_n), python_rhs)
 
-            st.success("Tính xong")
+            st.success("Hoàn tất")
 
-            # --- Xuất bảng kết quả (chỉ hiển thị display_count giá trị cuối & ẩn index) ---
             rows = [{"Chỉ số": i, "Giá trị": values[i]} for i in sorted(values.keys())]
             df = pd.DataFrame(rows)
-
             if len(df) > display_count:
                 df = df.tail(display_count)
 
@@ -577,44 +491,38 @@ if needed:
                 th, td { text-align: center !important; padding: 8px !important; }
                 </style>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-            styler = df.style.hide(axis="index")
-            st.write(styler.to_html(), unsafe_allow_html=True)
+            st.write(df.style.hide(axis="index").to_html(), unsafe_allow_html=True)
 
-            # === Biểu đồ === (dùng toàn bộ dữ liệu để xem xu hướng đầy đủ)
             st.markdown("### Biểu đồ")
-
-            # 1) Biểu đồ giá trị u(n)
-            st.subheader(r"Độ biến thiên của dãy số $u(n)$")
             n_list = sorted(values.keys())
             df_seq = pd.DataFrame({"n": n_list, "u(n)": [values[i] for i in n_list]}).set_index("n")
+            st.subheader(r"u(n)")
             st.line_chart(df_seq, height=280, use_container_width=True)
 
-            # 2) |u(n+1)-u(n)| và các đường tham chiếu 
-            st.subheader(r"Độ chênh $\Delta(u(n)) = |u(n+1) - u(n)|$ và các đường tham chiếu")
-            n_diff = [n for n in n_list if (n+1) in values]
-            diffs_u = [abs(values[n+1] - values[n]) for n in n_diff]
+            st.subheader(r"$\Delta(u(n)) = |u(n+1)-u(n)|$ + tham chiếu")
+            n_diff = [n for n in n_list if (n + 1) in values]
+            diffs_u = [abs(values[n + 1] - values[n]) for n in n_diff]
 
-            ref_harmonic, ref_square = [], []
+            ref_harm, ref_sq = [], []
             for n in n_diff:
                 if n in (-1, 0):
-                    ref_harmonic.append(float('nan'))
-                    ref_square.append(float('nan'))
+                    ref_harm.append(float("nan"))
+                    ref_sq.append(float("nan"))
                 else:
-                    ref_harmonic.append(abs(1/(n+1) - 1/n))
-                    ref_square.append(abs(1/((n+1)**2) - 1/(n**2)))
+                    ref_harm.append(abs(1 / (n + 1) - 1 / n))
+                    ref_sq.append(abs(1 / ((n + 1) ** 2) - 1 / (n**2)))
 
-            df_diff = pd.DataFrame({
-                "n": n_diff,
-                "|u(n+1)-u(n)|": diffs_u,
-                "|1/(n+1)-1/n|": ref_harmonic,
-                "|1/(n+1)^2-1/n^2|": ref_square
-            }).set_index("n")
-
+            df_diff = pd.DataFrame(
+                {
+                    "n": n_diff,
+                    "|u(n+1)-u(n)|": diffs_u,
+                    "|1/(n+1)-1/n|": ref_harm,
+                    "|1/(n+1)^2-1/n^2|": ref_sq,
+                }
+            ).set_index("n")
             st.line_chart(df_diff, height=320, use_container_width=True)
-            st.caption("Ghi chú: Bỏ qua các điểm n = -1 và n = 0 ở các đường tham chiếu để tránh chia cho 0.")
-
+            st.caption("Bỏ qua n = -1, 0 ở các đường tham chiếu để tránh chia 0.")
         except Exception as e:
             st.error(f"Lỗi khi tính: {e}")
-
