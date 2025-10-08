@@ -1,6 +1,3 @@
-# grouped_stats_simple.py
-# Chạy: streamlit run grouped_stats_simple.py
-
 import math
 from typing import Tuple
 
@@ -116,7 +113,7 @@ def grouped_mode(df: pd.DataFrame) -> float:
     if df["tần số"].sum() <= 0:
         return float("nan")
 
-    i = int(df["tần số"].idxmax())  # chỉ số lớp mốt
+    i = int(df["tần số"].idxmax())
     f1 = float(df.loc[i, "tần số"])
     L  = float(df.loc[i, "cận dưới"])
     h  = float(df.loc[i, "cận trên"] - df.loc[i, "cận dưới"])
