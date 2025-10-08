@@ -6,7 +6,7 @@ from typing import Dict, Tuple, List
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Sequence Studio (Python)", layout="wide")
+st.set_page_config(page_title="Tính dãy số", layout="wide")
 
 # ---------- CSS ----------
 st.markdown(
